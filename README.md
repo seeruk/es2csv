@@ -7,7 +7,7 @@ Elasticsearch to CSV exporter, written in Go.
 You'll need Go installed:
 
 ```
-$ go get -u github.com/SeerUK/es2csv
+$ go get -u -v github.com/SeerUK/es2csv
 ```
 
 ## Usage
@@ -35,3 +35,7 @@ Example:
     -fields "error,code,request_id" \
     -query "@log_name:auth.api AND _exists_:error"
 ```
+
+## License
+
+MIT
