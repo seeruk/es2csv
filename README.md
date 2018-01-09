@@ -2,6 +2,14 @@
 
 Elasticsearch to CSV exporter, written in Go.
 
+## Installation
+
+You'll need Go installed:
+
+```
+$ go get -u github.com/SeerUK/es2csv
+```
+
 ## Usage
 
 `es2csv` is very easy to use. CSV output will go to stdout, any log output goes to stderr.
