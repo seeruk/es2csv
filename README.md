@@ -4,10 +4,10 @@ Elasticsearch to CSV exporter, written in Go.
 
 ## Installation
 
-You'll need Go installed:
+You'll need Go installed, then simply run:
 
 ```
-$ go get -u -v github.com/SeerUK/es2csv
+$ go install github.com/seeruk/es2csv@latest
 ```
 
 ## Usage
