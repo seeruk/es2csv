@@ -15,15 +15,17 @@ $ go install github.com/seeruk/es2csv@latest
 `es2csv` is very easy to use. CSV output will go to stdout, any log output goes to stderr.
 
 ```
-Usage of ./es2csv:
+Usage of es2csv:
   -fields string
-    	A comma separated list of fields to include
+        A comma separated list of fields to include
   -host string
-    	The Elasticsearch host, e.g. 'http://localhost:9200'
+        The Elasticsearch host, e.g. 'http://localhost:9200'
   -index string
-    	An [optional] index to search within
+        An [optional] index to search within
   -query string
-    	A Lucene-syntax search query
+        A Lucene-syntax search query
+  -raw-query string
+        An Elasticsearch JSON query object
 ```
 
 Example:

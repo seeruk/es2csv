@@ -31,8 +31,14 @@ type Result struct {
 
 // ResultHits represents the hits section of an Elasticsearch result set.
 type ResultHits struct {
-	Total uint        `json:"total"`
-	Hits  []ResultHit `json:"hits"`
+	Total ResultsTotal `json:"total"`
+	Hits  []ResultHit  `json:"hits"`
+}
+
+// ResultsTotal describes the total hits produced by a query.
+type ResultsTotal struct {
+	Value    uint   `json:"value"`
+	Relation string `json:"relation"`
 }
 
 // ResultHit is an individual result hit, found in a set of ResultHits.
@@ -42,11 +48,13 @@ type ResultHit struct {
 
 func main() {
 	var host string
+	var rawQuery string
 	var query string
 	var index string
 	var fields string
 
 	flag.StringVar(&host, "host", "", "The Elasticsearch host, e.g. 'http://localhost:9200'")
+	flag.StringVar(&rawQuery, "raw-query", "", "An Elasticsearch JSON query object")
 	flag.StringVar(&query, "query", "", "A Lucene-syntax search query")
 	flag.StringVar(&fields, "fields", "", "A comma separated list of fields to include")
 	flag.StringVar(&index, "index", "", "An [optional] index to search within")
@@ -56,8 +64,8 @@ func main() {
 		fatal(errors.New("host must be set"))
 	}
 
-	if query == "" {
-		fatal(errors.New("query must be set"))
+	if rawQuery == "" && query == "" {
+		fatal(errors.New("raw-query or query must be set"))
 	}
 
 	if fields == "" {
@@ -71,56 +79,61 @@ func main() {
 
 	filter := strings.Split(fields, ",")
 
-	var hits []ResultHit
 	var scrollID string
+	var header []string
+	var hitCount int
 
 	for {
-		result, err := getPage(scrollID, hostURL.String(), index, query)
+		result, err := getPage(scrollID, hostURL.String(), index, rawQuery, query)
 		if err != nil && err != ErrNoMorePages {
 			fatal(err)
 		}
 
-		hits = append(hits, result.Hits.Hits...)
+		hits := result.Hits.Hits
+		hitCount += len(hits)
+
+		// If we're on the first page, let's write the CSV header
+		if scrollID == "" {
+			header = getHeader(hits[0], filter)
+			fmt.Println(strings.Join(header, ","))
+		}
+
+		// Print the rest of the results with the fields ordered by the header.
+		for _, h := range hits {
+			var cells []string
+
+			for _, k := range header {
+				var cell string
+
+				v, ok := h.Source[k]
+				if ok {
+					cell = fmt.Sprintf("%v", v)
+				}
+
+				cells = append(cells, cell)
+			}
+
+			fmt.Println(strings.Join(cells, ","))
+		}
+
 		scrollID = result.ScrollID
 
-		log.Printf("got %d of %d", len(hits), result.Hits.Total)
+		log.Printf("got %d of %d", hitCount, result.Hits.Total.Value)
+
+		if len(hits) == int(result.Hits.Total.Value) {
+			break
+		}
 
 		if err == ErrNoMorePages {
 			break
 		}
 	}
-
-	if len(hits) == 0 {
-		fatal(errors.New("no results found"))
-	}
-
-	// Get and print the header.
-	header := getHeader(hits[0], filter)
-	fmt.Println(strings.Join(header, ","))
-
-	// Print the rest of the results with the fields ordered by the header.
-	for _, h := range hits {
-		var cells []string
-
-		for _, k := range header {
-			var cell string
-
-			v, ok := h.Source[k]
-			if ok {
-				cell = fmt.Sprintf("%v", v)
-			}
-
-			cells = append(cells, cell)
-		}
-
-		fmt.Println(strings.Join(cells, ","))
-	}
 }
 
 // getPage returns the next page of results.
-func getPage(scrollID, host, index, query string) (Result, error) {
+func getPage(scrollID, host, index, rawQuery, query string) (Result, error) {
 	if scrollID == "" {
-		return getFirstPage(host, index, query)
+		return getFirstPage(host, index, rawQuery, query)
 	}
 
 	searchURL := fmt.Sprintf("%s/_search/scroll", host)
@@ -140,24 +153,30 @@ func getPage(scrollID, host, index, query string) (Result, error) {
 }
 
 // getFirstPage gets the first page of results.
-func getFirstPage(host, index, query string) (Result, error) {
+func getFirstPage(host, index, rawQuery, query string) (Result, error) {
 	searchURL := fmt.Sprintf("%s/_search", host)
 	if index != "" {
 		searchURL = fmt.Sprintf("%s/%s/_search?scroll=2m", host, index)
 	}
 
-	reqBody := strings.NewReader(fmt.Sprintf(`
-		{
-			"size": 10000,
-			"query": {
-				"query_string": {
-					"query": "%s"
+	var reqBody string
+
+	if rawQuery != "" {
+		reqBody = rawQuery
+	} else if query != "" {
+		reqBody = fmt.Sprintf(`
+			{
+				"size": 10000,
+				"query": {
+					"query_string": {
+						"query": "%s"
+					}
 				}
 			}
-		}
-	`, query))
+		`, query)
+	}
 
-	req, err := http.NewRequest("POST", searchURL, reqBody)
+	req, err := http.NewRequest("POST", searchURL, strings.NewReader(reqBody))
 	if err != nil {
 		return Result{}, err
 	}
